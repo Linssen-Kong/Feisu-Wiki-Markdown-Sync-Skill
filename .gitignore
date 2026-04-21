@@ -1,0 +1,6 @@
+exports/
+.tmp/
+node_modules/
+.env
+.env.*
+!.env.example

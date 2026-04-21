@@ -1,0 +1,4 @@
+interface:
+  display_name: "Feishu Wiki Sync v1.0.16"
+  short_description: "Export, audit, and re-import Feishu wiki Markdown with positioned media restore"
+  default_prompt: "Use $feishu-wiki-markdown-sync v1.0.16 to export a Feishu wiki tree to Markdown, audit round-trip fidelity, or re-import one Markdown file back into a Feishu doc with positioned image and file restore."
