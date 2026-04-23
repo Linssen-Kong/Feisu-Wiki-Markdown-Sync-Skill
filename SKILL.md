@@ -1,12 +1,12 @@
 ---
 name: feishu-wiki-markdown-sync
-version: 1.0.16
-description: Export a Feishu wiki tree to local Markdown, inline document images into the Markdown body, expand embedded sheets into CSV plus Markdown previews, audit round-trip fidelity, and re-import Markdown back into Feishu docs with original-position image and file restore via lark-cli positioned media insertion. Use when the user asks to sync, export, archive, audit, or re-import Feishu wiki or docx content in a Git-friendly way.
+version: 1.1.0
+description: Export a Feishu wiki tree to local Markdown, inline document images into the Markdown body, expand embedded sheets into CSV plus Markdown previews, convert raw whiteboards into embedded Mermaid mindmap text plus sidecar raw JSON, audit round-trip fidelity, and re-import Markdown back into Feishu docs with original-position image and file restore via lark-cli positioned media insertion. Use when the user asks to sync, export, archive, audit, or re-import Feishu wiki or docx content in a Git-friendly way.
 ---
 
 # Feishu Wiki Markdown Sync
 
-Version: `v1.0.16`
+Version: `v1.1.0`
 
 Required `lark-cli`: `>= 1.0.16`
 
@@ -63,10 +63,10 @@ The export workflow:
 - saves each docx/wiki node as its own `index.md`
 - downloads document images into `assets/` and places them inline in the Markdown body
 - converts Feishu text-drawing add-ons into plain code blocks that preserve Mermaid text
-- exports whiteboards via `code -> raw` fallback; when no code blocks are available, it stores raw node JSON and inserts a readable Markdown summary
+- exports whiteboards via `code -> raw` fallback; when no code blocks are available, it stores raw node JSON, converts raw nodes into Mermaid mindmap text, and embeds the Mermaid directly into the Markdown body
 - expands embedded sheet blocks into local `CSV` files plus Markdown table previews
 - preserves top-level sheet nodes as `xlsx + csv + preview.md + README.md`
-- collects CodePen links into `codepen-links.md`
+- stores export-level `tree.txt` and `codepen-links.md` in the root document `*.assets/` folder, with the export index appended to the root Markdown file; recognized legacy root-level sidecars are cleaned up on export
 
 ### Audit round-trip safety
 
@@ -129,7 +129,7 @@ Use:
 ## Important Constraints
 
 - Feishu text-drawing `add-ons` are not reliably writable through the current high-level CLI path. Preserve them as text, not as live drawing blocks.
-- Whiteboards are exported with automatic `code -> raw` fallback. Non-code whiteboards are preserved as raw node JSON plus a Markdown summary, not as live editable whiteboard blocks.
+- Whiteboards are exported with automatic `code -> raw` fallback. Non-code whiteboards are preserved as `Mermaid in Markdown + raw JSON sidecar`, not as live editable whiteboard blocks.
 - Same-document anchor jumps are not reliable in Feishu imports. Do not depend on Markdown `#anchor` links surviving import.
 - This skill assumes `lark-cli >= 1.0.16`, because positioned media insertion depends on `docs +media-insert --selection-with-ellipsis`.
 - Local Markdown links are still downgraded to readable text paths.

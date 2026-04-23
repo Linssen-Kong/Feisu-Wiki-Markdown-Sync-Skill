@@ -2,7 +2,7 @@
 
 `feishu-wiki-markdown-sync` is a local Codex skill for exporting Feishu wiki/doc content into Git-friendly Markdown and round-tripping selected Markdown documents back into Feishu docs.
 
-Current release: `v1.0.16`
+Current release: `v1.1.0`
 
 ## Configuration
 
@@ -30,10 +30,11 @@ Available configuration:
 - Download doc images and rewrite them as inline Markdown images
 - Expand embedded sheet blocks into local `CSV` files plus Markdown table previews
 - Convert Feishu text-drawing add-ons into plain code blocks that preserve Mermaid text
-- Export whiteboards as code when available, and automatically fall back to raw node JSON plus a readable summary when code export is unavailable
+- Export whiteboards as code when available, and automatically fall back to raw node JSON plus embedded Mermaid mindmap text when code export is unavailable
 - Convert CodePen embeds into stable Markdown links on export and restore them as Feishu `iframe` blocks on import
 - Re-import Markdown into Feishu docs with original-position image restore
 - Re-import standalone local non-Markdown files into Feishu docs as positioned file blocks
+- Keep export-level `tree.txt` and `codepen-links.md` inside the root document assets folder, with the export index appended to the root Markdown file
 
 ## Why This Exists
 
@@ -46,10 +47,21 @@ Feishu docs are great for collaboration, but they are not Git-friendly by defaul
 
 ## Version and CLI Requirement
 
-- Skill version: `v1.0.16`
+- Skill version: `v1.1.0`
 - Required `lark-cli`: `>= 1.0.16`
 
 This version depends on `lark-cli docs +media-insert --selection-with-ellipsis` for positioned media restore.
+
+## Release Log
+
+### v1.1.0
+
+- Improved raw whiteboard fallback: mindmap-style whiteboard nodes are now represented in exported Markdown as readable Mermaid mindmap text, with the raw JSON sidecar retained for audit and future conversion.
+- Moved export-level sidecars out of the output root. `tree.txt` and `codepen-links.md` now live under the root document `*.assets/` folder, and the former root `README.md` entrypoint is written into the root document Markdown as `导出索引`. Previously generated root-level sidecars are cleaned up when they are recognized as old export artifacts.
+
+### v1.0.16
+
+- Added positioned image and file restore for Markdown re-import through `lark-cli docs +media-insert --selection-with-ellipsis`.
 
 ## Repository Layout
 
@@ -83,6 +95,17 @@ Default output:
 
 ```text
 exports/feishu-wiki/
+```
+
+The output root stays clean. Export-level navigation files are placed under the root document folder:
+
+```text
+exports/feishu-wiki/
+  <root-title>/
+    <root-title>.md
+    <root-title>.assets/
+      tree.txt
+      codepen-links.md
 ```
 
 ### 2. Audit round-trip safety
@@ -152,7 +175,7 @@ Conclusion:
 ## Current Limitations
 
 - Feishu text-drawing `add-ons` cannot be round-tripped as live components through current CLI write paths
-- Whiteboards are exported via `code -> raw` fallback. Non-code whiteboards are preserved as raw node JSON plus a Markdown summary, not as live editable whiteboard blocks
+- Whiteboards are exported via `code -> raw` fallback. Non-code whiteboards are preserved as Mermaid mindmap text plus raw node JSON sidecars, not as live editable whiteboard blocks
 - Same-document anchor links are not reliable after Feishu import
 - Local Markdown links are downgraded to readable text paths
 - Standalone local `CSV` links are intentionally removed during import in favor of inline table previews
