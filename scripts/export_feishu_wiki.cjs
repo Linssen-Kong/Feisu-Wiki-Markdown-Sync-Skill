@@ -14,6 +14,8 @@ const DEFAULT_LARK_CLI = path.join(
 );
 const BOOLEAN_TRUE_VALUES = new Set(["1", "true", "yes", "on"]);
 const BOOLEAN_FALSE_VALUES = new Set(["0", "false", "no", "off"]);
+const EXPORT_INDEX_BEGIN = "<!-- FEISHU_EXPORT_INDEX_BEGIN -->";
+const EXPORT_INDEX_END = "<!-- FEISHU_EXPORT_INDEX_END -->";
 
 function printUsage() {
   console.error(
@@ -765,15 +767,168 @@ function summarizeWhiteboardNodes(nodes) {
   };
 }
 
+function pickFirstValue(...values) {
+  for (const value of values) {
+    if (value !== undefined && value !== null && value !== "") {
+      return value;
+    }
+  }
+  return "";
+}
+
+function getWhiteboardNodeId(node, index) {
+  return String(
+    pickFirstValue(
+      node?.id,
+      node?.node_id,
+      node?.nodeId,
+      node?.guid,
+      node?.uid,
+      `node-${index}`,
+    ),
+  );
+}
+
+function getWhiteboardParentId(node) {
+  const parent = pickFirstValue(
+    node?.parent_id,
+    node?.parentId,
+    node?.parent_node_id,
+    node?.parentNodeId,
+    node?.parent?.id,
+    node?.style?.parentId,
+  );
+  return parent ? String(parent) : "";
+}
+
+function getWhiteboardNodeLabel(node, index) {
+  const raw = pickFirstValue(
+    node?.text?.text,
+    node?.text?.content,
+    typeof node?.text === "string" ? node.text : "",
+    node?.content,
+    node?.title,
+    node?.name,
+    node?.label,
+  );
+  const normalized = normalizeWhitespace(String(raw || ""));
+  if (normalized) {
+    return normalized;
+  }
+  return `${node?.type || "节点"} ${index + 1}`;
+}
+
+function getWhiteboardNodePosition(node) {
+  return {
+    x: Number(
+      pickFirstValue(
+        node?.x,
+        node?.left,
+        node?.position?.x,
+        node?.transform?.x,
+        node?.bounds?.x,
+        0,
+      ),
+    ),
+    y: Number(
+      pickFirstValue(
+        node?.y,
+        node?.top,
+        node?.position?.y,
+        node?.transform?.y,
+        node?.bounds?.y,
+        0,
+      ),
+    ),
+  };
+}
+
+function escapeMermaidMindmapLabel(label) {
+  const cleaned = normalizeWhitespace(label)
+    .replace(/[`"'[\]{}()<>|]/g, " ")
+    .replace(/:/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return cleaned || "节点";
+}
+
+function buildWhiteboardMindmapTree(nodes) {
+  const items = (nodes || []).map((node, index) => {
+    const position = getWhiteboardNodePosition(node);
+    return {
+      id: getWhiteboardNodeId(node, index),
+      parentId: getWhiteboardParentId(node),
+      label: getWhiteboardNodeLabel(node, index),
+      index,
+      x: Number.isFinite(position.x) ? position.x : 0,
+      y: Number.isFinite(position.y) ? position.y : 0,
+      children: [],
+    };
+  });
+  const byId = new Map(items.map((item) => [item.id, item]));
+  const roots = [];
+
+  for (const item of items) {
+    const parent = item.parentId ? byId.get(item.parentId) : null;
+    if (parent && parent !== item) {
+      parent.children.push(item);
+    } else {
+      roots.push(item);
+    }
+  }
+
+  const sortItems = (list) => {
+    list.sort((left, right) => left.y - right.y || left.x - right.x || left.index - right.index);
+    for (const item of list) {
+      sortItems(item.children);
+    }
+  };
+  sortItems(roots);
+
+  return roots;
+}
+
+function whiteboardNodesToMermaidMindmap(nodes, title = "白板") {
+  const roots = buildWhiteboardMindmapTree(nodes).slice(0, 120);
+  const lines = ["mindmap", `  root((${escapeMermaidMindmapLabel(title)}))`];
+
+  const appendItem = (item, depth) => {
+    lines.push(`${"  ".repeat(depth)}${escapeMermaidMindmapLabel(item.label)}`);
+    for (const child of item.children.slice(0, 40)) {
+      appendItem(child, depth + 1);
+    }
+  };
+
+  for (const item of roots) {
+    appendItem(item, 2);
+  }
+
+  if (!roots.length) {
+    lines.push("    空白白板");
+  }
+
+  if ((nodes || []).length > 120) {
+    lines.push(`    其余 ${(nodes || []).length - 120} 个节点已保留在 raw JSON`);
+  }
+
+  return lines.join("\n");
+}
+
 function formatWhiteboardRawFallback(token, nodes, context, index) {
   const summary = summarizeWhiteboardNodes(nodes);
   const assetName = `whiteboard-${String(index).padStart(2, "0")}-${tokenFileSuffix(token)}.raw.json`;
   const assetPath = path.join(context.assetsDir, assetName);
   writeFile(assetPath, `${JSON.stringify({ nodes }, null, 2)}\n`);
 
+  const mindmap = whiteboardNodesToMermaidMindmap(nodes, `whiteboard ${index}`);
+  const mindmapAssetName = assetName.replace(/\.raw\.json$/i, ".mindmap.mmd");
+  const mindmapAssetPath = path.join(context.assetsDir, mindmapAssetName);
+  writeFile(mindmapAssetPath, `${mindmap}\n`);
+
   const relative = path.relative(context.nodeDir, assetPath).replace(/\\/g, "/");
+  const mindmapRelative = path.relative(context.nodeDir, mindmapAssetPath).replace(/\\/g, "/");
   const lines = [];
-  lines.push("> 白板未命中 code 导出，已自动回退为 raw 节点导出。");
+  lines.push("> 白板未命中 code 导出，已自动回退为 raw 节点导出，并生成 Mermaid mindmap 预览。");
   lines.push(`> 节点数: ${summary.nodeCount}`);
   if (summary.topTypes.length) {
     lines.push(`> 主要类型: ${summary.topTypes.join(", ")}`);
@@ -782,7 +937,7 @@ function formatWhiteboardRawFallback(token, nodes, context, index) {
     lines.push(`> 可见文本: ${summary.labels.join(" / ")}`);
   }
 
-  return `\n\n${lines.join("\n")}\n\n[白板原始节点 JSON](./${relative})\n\n`;
+  return `\n\n${lines.join("\n")}\n\n\`\`\`mermaid\n${mindmap}\n\`\`\`\n\n[白板 Mermaid mindmap](./${mindmapRelative})\n\n[白板原始节点 JSON](./${relative})\n\n`;
 }
 
 function convertLarkTable(tableContent) {
@@ -969,11 +1124,97 @@ function relativeMarkdownLink(fromPath, toPath) {
   return path.relative(path.dirname(fromPath), toPath).replace(/\\/g, "/");
 }
 
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function buildTree(node, depth = 0) {
   const current = unwrapNode(node);
   const line = `${"  ".repeat(depth)}- ${current.title} [${current.obj_type}]`;
   const children = (current.children || []).flatMap((child) => buildTree(child, depth + 1));
   return [line, ...children];
+}
+
+function writeExportSidecars(rootNode, rootExportDir, treeLines, collected) {
+  const safeTitle = sanitizeSegment(rootNode.title);
+  const rootMarkdownPath = path.join(rootExportDir, `${safeTitle}.md`);
+  const rootAssetsDir = path.join(rootExportDir, `${safeTitle}.assets`);
+  ensureDir(rootAssetsDir);
+
+  const treePath = path.join(rootAssetsDir, "tree.txt");
+  writeFile(treePath, `${treeLines.join("\n")}\n`);
+
+  const codepenLines = ["# CodePen Links", ""];
+  if (collected.codepen.length) {
+    for (const item of collected.codepen) {
+      codepenLines.push(`- ${item.title}: ${item.url}`);
+    }
+  } else {
+    codepenLines.push("当前没有发现 CodePen 链接。");
+  }
+  codepenLines.push("");
+  const codepenPath = path.join(rootAssetsDir, "codepen-links.md");
+  writeFile(codepenPath, codepenLines.join("\n"));
+
+  const exportIndexLines = [
+    EXPORT_INDEX_BEGIN,
+    "## 导出索引",
+    "",
+    `- 导出时间: ${new Date().toISOString()}`,
+    `- 目录树: [tree.txt](./${relativeMarkdownLink(rootMarkdownPath, treePath)})`,
+    `- CodePen 汇总: [codepen-links.md](./${relativeMarkdownLink(rootMarkdownPath, codepenPath)})`,
+    "",
+    "```text",
+    ...treeLines,
+    "```",
+    "",
+    EXPORT_INDEX_END,
+  ];
+  if (CONFIG.includeSensitiveMetadata) {
+    exportIndexLines.splice(2, 0, `- 根目录链接: ${buildWikiUrl(ROOT_TOKEN)}`);
+  }
+
+  const existing = fs.existsSync(rootMarkdownPath)
+    ? fs.readFileSync(rootMarkdownPath, "utf8").trimEnd()
+    : `# ${rootNode.title}`;
+  const cleaned = existing
+    .replace(
+      new RegExp(
+        `\\n?${escapeRegExp(EXPORT_INDEX_BEGIN)}[\\s\\S]*?${escapeRegExp(EXPORT_INDEX_END)}`,
+        "m",
+      ),
+      "",
+    )
+    .trimEnd();
+  writeFile(rootMarkdownPath, `${cleaned}\n\n${exportIndexLines.join("\n").trimEnd()}\n`);
+}
+
+function removeGeneratedRootSidecars(rootNode) {
+  const generatedFiles = [
+    {
+      name: "README.md",
+      matches: (text) => text.startsWith("# Feishu Wiki Export\n"),
+    },
+    {
+      name: "codepen-links.md",
+      matches: (text) => text.startsWith("# CodePen Links\n"),
+    },
+    {
+      name: "tree.txt",
+      matches: (text) => text.startsWith(`- ${rootNode.title} [${rootNode.obj_type}]`),
+    },
+  ];
+
+  for (const file of generatedFiles) {
+    const filePath = path.join(OUTPUT_ROOT, file.name);
+    if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+      continue;
+    }
+    const text = fs.readFileSync(filePath, "utf8");
+    if (file.matches(text)) {
+      fs.unlinkSync(filePath);
+    }
+  }
 }
 
 function walkTree(nodeInfo) {
@@ -1125,42 +1366,8 @@ function main() {
   const rootExportDir = exportNode(rootNode, OUTPUT_ROOT, collected);
 
   const treeLines = buildTree(rootNode);
-  writeFile(path.join(OUTPUT_ROOT, "tree.txt"), `${treeLines.join("\n")}\n`);
-
-  const codepenLines = ["# CodePen Links", ""];
-  if (collected.codepen.length) {
-    for (const item of collected.codepen) {
-      codepenLines.push(`- ${item.title}: ${item.url}`);
-    }
-  } else {
-    codepenLines.push("当前没有发现 CodePen 链接。");
-  }
-  codepenLines.push("");
-  writeFile(path.join(OUTPUT_ROOT, "codepen-links.md"), codepenLines.join("\n"));
-
-  const readmePath = path.join(OUTPUT_ROOT, "README.md");
-  const readmeLines = [
-    "# Feishu Wiki Export",
-    "",
-    `- 根节点: ${rootNode.title}`,
-    `- 导出时间: ${new Date().toISOString()}`,
-    "",
-    "## 目录树",
-    "",
-    "```text",
-    ...treeLines,
-    "```",
-    "",
-    "## 入口",
-    "",
-    `- [根节点导出](./${path.relative(OUTPUT_ROOT, path.join(rootExportDir, `${sanitizeSegment(rootNode.title)}.md`)).replace(/\\/g, "/")})`,
-    `- [CodePen 汇总](./${path.basename(path.join(OUTPUT_ROOT, "codepen-links.md"))})`,
-    "",
-  ];
-  if (CONFIG.includeSensitiveMetadata) {
-    readmeLines.splice(3, 0, `- 根目录链接: ${buildWikiUrl(ROOT_TOKEN)}`);
-  }
-  writeFile(readmePath, readmeLines.join("\n"));
+  writeExportSidecars(rootNode, rootExportDir, treeLines, collected);
+  removeGeneratedRootSidecars(rootNode);
 }
 
 try {
