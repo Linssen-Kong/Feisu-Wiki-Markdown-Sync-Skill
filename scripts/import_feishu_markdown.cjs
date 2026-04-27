@@ -2,8 +2,8 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-const SKILL_VERSION = "1.0.16";
-const MIN_LARK_CLI_VERSION = "1.0.16";
+const SKILL_VERSION = "1.3.0";
+const MIN_LARK_CLI_VERSION = "1.0.20";
 const IMAGE_EXTENSIONS = new Set([
   ".png",
   ".jpg",
@@ -26,7 +26,7 @@ if (!inputPath || !targetDoc) {
   process.exit(1);
 }
 
-const LARK_CLI = path.join(
+const LARK_CLI = process.env.LARK_CLI_PATH || path.join(
   process.env.APPDATA || "",
   "npm",
   "node_modules",
