@@ -1,4 +1,4 @@
-# Feishu Wiki Markdown Sync
+# Feishu Markdown Sync
 
 `feishu-wiki-markdown-sync` is a local Codex skill for exporting Feishu wiki/doc content into Git-friendly Markdown and round-tripping selected Markdown documents back into Feishu docs.
 
