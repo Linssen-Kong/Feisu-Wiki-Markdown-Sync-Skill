@@ -6,9 +6,9 @@ description: Export Feishu wiki, doc, and Sheet page content into Git-friendly M
 
 # Feishu Markdown Sync
 
-Version: `v1.6.0`
+Version: `v1.7.0`
 
-Required `lark-cli`: `>= 1.0.27`
+Required `lark-cli`: `>= 1.0.39`
 
 Some legacy script names and default export folders still use `wiki` for compatibility. Product and install names should use **Feishu Markdown Sync** because doc, Sheet, Drive-native Markdown, and whiteboard workflows are now in scope.
 
@@ -294,7 +294,7 @@ Use:
 - Whiteboards are exported with automatic `code -> raw` fallback. Non-code whiteboards are preserved as `Mermaid in Markdown + raw JSON sidecar`. To update a live whiteboard, query the token and call `lark-cli whiteboard +update --input_format mermaid|plantuml|raw`.
 - Raw JSON is audit-only; exported resources should have a Markdown preview whenever possible.
 - Same-document anchor jumps are not reliable in Feishu imports. Do not depend on Markdown `#anchor` links surviving import.
-- This skill assumes `lark-cli >= 1.0.27`, because document v2 partial fetch/update, Sheet export/write/append/read, Drive-native Markdown files, current whiteboard update flows, and recent CLI shortcut improvements are part of the optimization path.
+- This skill assumes `lark-cli >= 1.0.39`, because document v2 partial fetch/update, Sheet export/write/append/read, Drive-native Markdown files, current whiteboard update flows, and recent CLI shortcut improvements are part of the optimization path.
 - Local Markdown links are still downgraded to readable text paths.
 - Standalone local `CSV` links are intentionally removed during import. The inline Markdown table preview is kept as the Feishu-side representation.
 - Sheet write-back uses `scripts/import_feishu_sheet.cjs`; do not route CSV write-back through Markdown document import.
@@ -365,7 +365,7 @@ This command reports `supportStatus`. Treat doc v2 `<add-ons>` as unsupported un
 - `scripts/feishu_markdown_file.cjs`
   Create, fetch, and overwrite Drive-native Markdown files without using the doc/wiki sync path.
 - `scripts/feishu_cli_tools.cjs`
-  Expose guarded wrappers for lark-cli v1.0.24-v1.0.27 sidecar capabilities.
+  Expose guarded wrappers for lark-cli v1.0.24-v1.0.39 sidecar capabilities.
 - `scripts/feishu_text_diagram.cjs`
   Update whiteboards from Mermaid/PlantUML and run experimental doc add-ons verification.
 - `scripts/patch_feishu_doc.cjs`

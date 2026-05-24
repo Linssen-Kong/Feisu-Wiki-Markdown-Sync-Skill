@@ -326,7 +326,7 @@ function buildReport(markdownResults, sheetResults, readabilityResults) {
   lines.push("| 嵌入表格 | CSV 文件 + Markdown 预览表格 | 保真为数据 | 本地可直接阅读，回导时保留预览表格文本 |");
   lines.push("| sheet 节点 | xlsx + csv 目录 | 大体保真 | 本地完整保留，回导为文档时以文本/附件策略为主 |");
   lines.push("| add-ons 文本绘图 | 已转代码块 | 保真为文本 | 当前飞书 CLI 不支持回写 add-ons |");
-  lines.push("| 格式快照 | *.assets/*.format.xml + format-map.json | 辅助保真 | 用于 v1.6.0 三方合并和格式恢复 |");
+  lines.push("| 格式快照 | *.assets/*.format.xml + format-map.json | 辅助保真 | 用于 v1.7.0 三方合并和格式恢复 |");
   lines.push("| 白板 raw | raw.json + preview.md + mindmap.mmd | 可读降级 | raw 仅作审计，不作为主要阅读入口 |");
   lines.push("");
   lines.push("## 后续建议");

@@ -30,6 +30,7 @@ function printUsage() {
       "  - Git commit 不属于同步流程；本脚本只更新/检查本地工作区。",
       "  - push 默认只生成计划；传 --apply 才调用底层回写脚本。",
       "  - pull 可传 --include-sensitive-metadata，把可写绑定信息写入本地验证目录。",
+      "  - Sheet CSV 数据默认可写回；样式/图片/筛选器写回需使用 import_feishu_sheet.cjs 的显式格式参数。",
       "  - 双边变化或无法证明安全的三方合并会生成 .tmp/sync-conflict-*.md。",
     ].join("\n"),
   );
@@ -48,6 +49,7 @@ function parseArgs(argv) {
     baseUrl: process.env.FEISHU_BASE_URL || "",
     apply: false,
     includeSensitiveMetadata: false,
+    includeSheetFormat: false,
   };
   for (let i = 1; i < argv.length; i += 1) {
     const arg = argv[i];
@@ -61,6 +63,10 @@ function parseArgs(argv) {
     }
     if (arg === "--include-sensitive-metadata") {
       options.includeSensitiveMetadata = true;
+      continue;
+    }
+    if (arg === "--include-sheet-format") {
+      options.includeSheetFormat = true;
       continue;
     }
     const readValue = (name) => {

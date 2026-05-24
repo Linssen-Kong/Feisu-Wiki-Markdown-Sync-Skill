@@ -1,9 +1,10 @@
+#!/usr/bin/env node
 const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-const SKILL_VERSION = "1.6.0";
-const MIN_LARK_CLI_VERSION = "1.0.27";
+const SKILL_VERSION = "1.7.0";
+const MIN_LARK_CLI_VERSION = "1.0.39";
 const DEFAULT_LARK_CLI = path.join(
   process.env.APPDATA || "",
   "npm",
@@ -21,6 +22,10 @@ function printUsage() {
       "用法:",
       "  node scripts/import_feishu_sheet.cjs --url <sheet_url> --sheet-id <sheet_id> --range <A1:C3> --input <file.csv|file.json> [--mode write|append]",
       "  node scripts/import_feishu_sheet.cjs --spreadsheet-token <token> --sheet-id <sheet_id> --range <A1:C3> --values '[[\"A\",\"B\"]]' [--mode write|append]",
+      "  node scripts/import_feishu_sheet.cjs --url <sheet_url> --sheet-id <sheet_id> --range <A1:C3> --style-json <style.json> [--dry-run]",
+      "  node scripts/import_feishu_sheet.cjs --url <sheet_url> --batch-style-json <batch-style.json> [--dry-run]",
+      "  node scripts/import_feishu_sheet.cjs --url <sheet_url> --sheet-id <sheet_id> --image <image.png> --cell <A1> [--dry-run]",
+      "  node scripts/import_feishu_sheet.cjs --url <sheet_url> --sheet-id <sheet_id> --filter-view-json <filter-view.json> [--dry-run]",
       "",
       "说明:",
       "  - 必须显式提供 --range，避免误覆盖整表。",
@@ -53,6 +58,11 @@ function parseArgs(argv) {
     range: "",
     input: "",
     values: "",
+    styleJson: "",
+    batchStyleJson: "",
+    image: "",
+    cell: "",
+    filterViewJson: "",
     dryRun: false,
     larkCliPath: process.env.LARK_CLI_PATH || DEFAULT_LARK_CLI,
   };
@@ -76,6 +86,11 @@ function parseArgs(argv) {
       "--range",
       "--input",
       "--values",
+      "--style-json",
+      "--batch-style-json",
+      "--image",
+      "--cell",
+      "--filter-view-json",
       "--lark-cli",
     ];
     const optionName = supported.find(
@@ -100,6 +115,16 @@ function parseArgs(argv) {
       options.input = value;
     } else if (optionName === "--values") {
       options.values = value;
+    } else if (optionName === "--style-json") {
+      options.styleJson = value;
+    } else if (optionName === "--batch-style-json") {
+      options.batchStyleJson = value;
+    } else if (optionName === "--image") {
+      options.image = value;
+    } else if (optionName === "--cell") {
+      options.cell = value;
+    } else if (optionName === "--filter-view-json") {
+      options.filterViewJson = value;
     } else if (optionName === "--lark-cli") {
       options.larkCliPath = value;
     }
@@ -112,14 +137,22 @@ function parseArgs(argv) {
   if (!options.url && !options.spreadsheetToken) {
     throw new Error("必须提供 --url 或 --spreadsheet-token");
   }
-  if (!options.sheetId) {
+  const hasDataWrite = !!(options.input || options.values);
+  const hasFormatWrite = !!(options.styleJson || options.batchStyleJson || options.image || options.filterViewJson);
+  if (!options.sheetId && !options.batchStyleJson) {
     throw new Error("必须提供 --sheet-id");
   }
-  if (!options.range) {
+  if (hasDataWrite && !options.range) {
     throw new Error("必须提供 --range，禁止隐式整表写入");
   }
-  if (!options.input && !options.values) {
-    throw new Error("必须提供 --input 或 --values");
+  if (options.styleJson && !options.range) {
+    throw new Error("--style-json 必须同时提供 --range");
+  }
+  if (options.image && !options.cell) {
+    throw new Error("--image 必须同时提供 --cell");
+  }
+  if (!hasDataWrite && !hasFormatWrite) {
+    throw new Error("必须提供 --input、--values 或格式写回参数");
   }
   if (options.input && options.values) {
     throw new Error("--input 和 --values 只能二选一");
@@ -343,6 +376,121 @@ function buildTargetArgs(options) {
   return target;
 }
 
+function buildSheetIdentityArgs(options) {
+  const target = [];
+  if (options.url) {
+    target.push("--url", options.url);
+  } else {
+    target.push("--spreadsheet-token", options.spreadsheetToken);
+  }
+  if (options.sheetId) target.push("--sheet-id", options.sheetId);
+  target.push("--as", "user");
+  return target;
+}
+
+function readJsonFile(filePath, label) {
+  const resolved = path.resolve(filePath);
+  if (!fs.existsSync(resolved)) {
+    throw new Error(`${label} 文件不存在: ${filePath}`);
+  }
+  return JSON.parse(fs.readFileSync(resolved, "utf8"));
+}
+
+function applySheetFormatWrites(options) {
+  const results = [];
+  const identityArgs = buildSheetIdentityArgs(options);
+  const qualifyRange = (range) => {
+    if (!range) return range;
+    if (String(range).includes("!") || !options.sheetId) return range;
+    return `${options.sheetId}!${range}`;
+  };
+  if (options.styleJson) {
+    const style = readJsonFile(options.styleJson, "--style-json");
+    const args = [
+      "sheets",
+      "+set-style",
+      ...identityArgs,
+      "--range",
+      options.range,
+      "--style",
+      JSON.stringify(style),
+    ];
+    if (options.dryRun) args.push("--dry-run");
+    results.push({ type: "style", result: runLark(options.larkCliPath, args) });
+  }
+  if (options.batchStyleJson) {
+    const data = readJsonFile(options.batchStyleJson, "--batch-style-json");
+    const args = [
+      "sheets",
+      "+batch-set-style",
+      ...buildSheetIdentityArgs({ ...options, sheetId: "" }),
+      "--data",
+      JSON.stringify(data),
+    ];
+    if (options.dryRun) args.push("--dry-run");
+    results.push({ type: "batch-style", result: runLark(options.larkCliPath, args) });
+  }
+  if (options.image) {
+    if (!fs.existsSync(path.resolve(options.image))) {
+      throw new Error(`图片不存在: ${options.image}`);
+    }
+    const args = [
+      "sheets",
+      "+write-image",
+      ...identityArgs,
+      "--range",
+      options.cell,
+      "--image",
+      path.relative(process.cwd(), path.resolve(options.image)).replace(/\\/g, "/"),
+    ];
+    if (options.dryRun) args.push("--dry-run");
+    results.push({ type: "image", result: runLark(options.larkCliPath, args) });
+  }
+  if (options.filterViewJson) {
+    const spec = readJsonFile(options.filterViewJson, "--filter-view-json");
+    const createArgs = [
+      "sheets",
+      "+create-filter-view",
+      ...identityArgs,
+      "--range",
+      qualifyRange(spec.range || options.range),
+      "--filter-view-name",
+      spec.name || spec.filterViewName || "Feishu Markdown Sync Filter",
+    ];
+    if (spec.filterViewId) createArgs.push("--filter-view-id", spec.filterViewId);
+    if (options.dryRun) createArgs.push("--dry-run");
+    const createResult = runLark(options.larkCliPath, createArgs);
+    results.push({ type: "filter-view", result: createResult });
+    const filterViewId =
+      spec.filterViewId ||
+      createResult?.data?.filter_view_id ||
+      createResult?.data?.filter_view?.filter_view_id ||
+      createResult?.data?.filterViewId ||
+      createResult?.filter_view_id;
+    for (const condition of spec.conditions || []) {
+      if (!filterViewId) break;
+      const conditionArgs = [
+        "sheets",
+        "+create-filter-view-condition",
+        ...identityArgs,
+        "--filter-view-id",
+        filterViewId,
+        "--condition-id",
+        condition.conditionId || condition.column || condition.condition_id,
+        "--filter-type",
+        condition.filterType || condition.filter_type,
+        "--compare-type",
+        condition.compareType || condition.compare_type,
+        "--expected",
+        JSON.stringify(condition.expected || []),
+      ];
+      if (options.dryRun) conditionArgs.push("--dry-run");
+      results.push({ type: "filter-condition", result: runLark(options.larkCliPath, conditionArgs) });
+    }
+  }
+  return results;
+}
+
 function compareWrite(expectedRows, actualRows) {
   const expected = normalizeRows(expectedRows);
   const actual = normalizeRows(actualRows).slice(0, expected.length);
@@ -379,6 +527,25 @@ function main() {
   }
 
   const versionText = assertMinimumLarkCliVersion(options.larkCliPath);
+  const formatResults = applySheetFormatWrites(options);
+  const hasDataWrite = !!(options.input || options.values);
+  if (!hasDataWrite) {
+    console.log(
+      JSON.stringify(
+        {
+          ok: true,
+          skillVersion: SKILL_VERSION,
+          larkCliVersion: String(versionText).trim(),
+          formatResults,
+          dryRun: options.dryRun,
+        },
+        null,
+        2,
+      ),
+    );
+    return;
+  }
+
   const values = parseInput(options);
   if (values.length === 0) {
     throw new Error("写入数据为空");
@@ -399,7 +566,7 @@ function main() {
 
   const writeResult = runLark(options.larkCliPath, writeArgs);
   if (options.dryRun) {
-    console.log(JSON.stringify({ dryRun: true, writeResult }, null, 2));
+    console.log(JSON.stringify({ dryRun: true, formatResults, writeResult }, null, 2));
     return;
   }
 
@@ -437,6 +604,7 @@ function main() {
         range: options.range,
         rowsWritten: values.length,
         columnsWritten: Math.max(...values.map((row) => row.length)),
+        formatResults,
         writeResult,
         readBackRows: readValues.length,
       },

@@ -1,9 +1,10 @@
+#!/usr/bin/env node
 const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-const SKILL_VERSION = "1.6.0";
-const MIN_LARK_CLI_VERSION = "1.0.27";
+const SKILL_VERSION = "1.7.0";
+const MIN_LARK_CLI_VERSION = "1.0.39";
 const IMAGE_EXTENSIONS = new Set([
   ".png",
   ".jpg",

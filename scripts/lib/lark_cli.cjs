@@ -2,8 +2,8 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-const SKILL_VERSION = "1.6.0";
-const MIN_LARK_CLI_VERSION = "1.0.27";
+const SKILL_VERSION = "1.7.0";
+const MIN_LARK_CLI_VERSION = "1.0.39";
 const NODE_BIN = process.env.NODE_BINARY || process.execPath || "node";
 const DEFAULT_LARK_CLI = path.join(
   process.env.APPDATA || "",

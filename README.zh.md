@@ -4,14 +4,32 @@
 
 `feishu-markdown-sync` 是一个面向 Codex/AI Agent 的飞书内容同步工具。它把飞书 Wiki、Docx、Sheet、白板等内容导出成适合 Git 管理的 Markdown、CSV、资源文件和格式快照，并提供谨慎的回写、审计和同步能力。
 
-当前版本：`v1.6.0`
+当前版本：`v1.7.0`
 
-最低要求：`lark-cli >= 1.0.27`
+最低要求：`lark-cli >= 1.0.39`
 
-本版本接入了 `lark-cli v1.0.27`，新增 Drive 原生 Markdown 文件管理、Sheet/Base/Task/IM/Drive/config 等旁路能力入口，并明确区分两条 Markdown 路径：
+本版本接入了 `lark-cli v1.0.39`，新增 Claude Code 和 npm 安装支持，增加 Drive 普通文件直接同步，扩展 Sheet 样式/图片/筛选器写回，支持 Slides 快照导出，并修复导出文件未稳定使用 Feishu title 命名的问题。
 
 - Doc/Wiki Markdown Sync：飞书文档或 Wiki 与本地 Markdown/CSV/资源文件之间的同步。
+- Drive 普通文件同步：图片、PDF、PPTX、附件、Drive 原生 Markdown 等无需格式转换的文件直接双向同步。
 - Drive 原生 Markdown：飞书云空间中作为普通 `.md` 文件存储的 Markdown 文件。
+
+## npm 安装
+
+全局安装后，显式安装到 Codex、Claude Code 或两者：
+
+```powershell
+npm install -g feishu-markdown-sync
+feishu-markdown-sync install --target both --scope user
+```
+
+也可以通过 `npx` 使用已发布或本地打包的包：
+
+```powershell
+npx feishu-markdown-sync install --target claude --scope project
+```
+
+安装命令只复制 skill 文件，不写凭据、不自动登录飞书、不默认覆盖已有目录；需要覆盖时传 `--force`。
 
 ## 安装为本地 Codex Skill
 
@@ -24,6 +42,22 @@ python "$env:USERPROFILE\.codex\skills\.system\skill-installer\scripts\install-s
 如果 `C:\Users\<you>\.codex\skills\feishu-markdown-sync` 已存在，请先删除或重命名这个已安装 skill 目录，再运行上面的命令。如果你之前安装过 `feishu-wiki-markdown-sync`，确认新 skill 可用后可以删除旧安装目录。安装后需要重启 Codex，新的 skill 才会被加载。
 
 > 迁移说明：本 skill 旧安装名是 `feishu-wiki-markdown-sync`，新安装名是 `feishu-markdown-sync`。如果两个目录同时存在于 `C:\Users\<you>\.codex\skills\` 下，Codex 会加载两个功能范围相同的 skill。升级后请删除或重命名旧的 `feishu-wiki-markdown-sync` 目录，只保留新目录。
+
+## 安装为 Claude Code Skill
+
+项目级安装：
+
+```powershell
+feishu-markdown-sync install --target claude --scope project
+```
+
+用户级安装：
+
+```powershell
+feishu-markdown-sync install --target claude --scope user
+```
+
+Claude Code 会读取 `.claude/skills/feishu-markdown-sync/SKILL.md`。该 skill 使用 `${CLAUDE_SKILL_DIR}` 引用脚本，因此用户级、项目级和 npm 安装位置都可用。
 
 ## 为什么需要它
 
@@ -48,6 +82,12 @@ python "$env:USERPROFILE\.codex\skills\.system\skill-installer\scripts\install-s
 - 用 Mermaid/PlantUML 写入飞书白板，实现真正可回读的文本绘图。
 - 将飞书文本绘图 add-ons 保留为 Mermaid/text 代码块；云端验证显示 doc v2 `<add-ons>` 不支持 live round-trip。
 - 提供 Drive 原生 `.md` 文件的创建、读取和覆盖入口。
+- 提供 Drive 原生 `.md` 文件的 diff/patch 能力。
+- 通过 `drive +sync` 同步 Drive 普通文件，适合附件、图片、PDF、PPTX、Drive 原生 Markdown 等。
+- 查询、下载和受控回滚 Drive 文件历史版本。
+- 显式写回 Sheet 样式、批量样式、图片、筛选视图和筛选条件。
+- 将 Slides 节点导出为 PPTX 快照，用于 Git 审阅和归档。
+- 导出对象默认使用 Feishu title 命名，并在重名时自动加稳定短后缀。
 - 提供 Sheet 管理、Base 记录读取/删除、任务附件上传、IM 搜索、Drive 评论、config bind 的受控 wrapper。
 
 ## 配置
@@ -144,7 +184,53 @@ Sheet 写回必须显式提供 `--range`，禁止隐式整表覆盖。
 node scripts/feishu_markdown_file.cjs create --file ".\note.md" --folder-token "<folder_token>" --dry-run
 node scripts/feishu_markdown_file.cjs fetch --file-token "<markdown_file_token>" --output ".\exports\drive-markdown\note.md"
 node scripts/feishu_markdown_file.cjs overwrite --file-token "<markdown_file_token>" --file ".\note.md" --dry-run
+node scripts/feishu_markdown_file.cjs diff --file-token "<markdown_file_token>" --file ".\note.md"
+node scripts/feishu_markdown_file.cjs patch --file-token "<markdown_file_token>" --pattern "旧内容" --content "新内容" --dry-run
 ```
+
+### 6b. 同步 Drive 普通文件
+
+这条链路只处理 Drive 普通文件，不替代 Doc/Wiki/Sheet 结构化同步。默认冲突策略是 `keep-both`，避免双边修改时覆盖任意一侧。
+
+```powershell
+node scripts/feishu_drive_sync.cjs sync --folder-token "<folder_token>" --local-dir ".\drive-files" --dry-run
+```
+
+### 6c. 写回 Sheet 样式、图片和筛选器
+
+CSV/JSON 数据写回仍是默认安全路径；格式写回必须显式指定。
+
+```powershell
+node scripts/import_feishu_sheet.cjs --url "<sheet_url>" --sheet-id "<sheet_id>" --range "A1:C3" --style-json ".\style.json" --dry-run
+node scripts/import_feishu_sheet.cjs --url "<sheet_url>" --sheet-id "<sheet_id>" --image ".\logo.png" --cell "B2" --dry-run
+node scripts/import_feishu_sheet.cjs --url "<sheet_url>" --sheet-id "<sheet_id>" --filter-view-json ".\filter-view.json" --dry-run
+```
+
+### 6d. 导出 Slides 快照
+
+Wiki 树中的 Slides 节点会导出为 PPTX 快照，并保留 `README.md` 和 `metadata.json`。v1.7.0 暂不做 Slides 结构化回写。
+
+### 6e. 导出命名规则
+
+导出文件名按以下顺序解析：Feishu 文档/文件真实 title、Wiki node title、token fallback。同级重名会追加稳定短后缀，避免覆盖。`metadata.json` 会记录 `wikiNodeTitle`、`resolvedTitle`、`filenameTitleSource` 和 `safeFilename` 方便审计。
+
+### 6f. v1.7.0 验证状态
+
+已在 2026-05-24 完成本地验证：
+
+- `npm run check` 通过所有脚本语法检查。
+- `feishu-markdown-sync doctor` 和 `feishu_cli_tools doctor` 均确认当前 CLI 为 `lark-cli version 1.0.39`。
+- Drive sync、Drive version revert、Sheet style、Sheet filter-view 的 dry-run 均生成预期 API 请求。
+- `npm pack`、tarball 安装、bin 命令执行、项目级 Claude skill 安装均通过。
+
+补充授权后，真实云端验证已完成：
+
+- Drive 普通文件同步通过 push、pull 和 `keep-both` 冲突保留验证。
+- Drive 版本历史和指定历史版本下载通过。
+- Sheet CSV 写回、样式写回、图片写入、筛选视图/筛选条件创建、格式快照导出均通过。
+- Slides 创建和 PPTX 导出通过。
+
+部分飞书 OpenAPI 调用出现过临时 TLS handshake timeout，重试后成功。脱敏后的验证记录见 `docs/validation-log.md`。
 
 ### 7. 更新飞书白板文本绘图
 
@@ -155,7 +241,7 @@ node scripts/feishu_text_diagram.cjs whiteboard update --whiteboard-token "<whit
 
 `--overwrite` 默认 dry-run。确认请求无误后，添加 `--apply` 执行真实写入。
 
-### 8. lark-cli 1.0.27 旁路能力
+### 8. lark-cli 1.0.39 旁路能力
 
 ```powershell
 node scripts/feishu_cli_tools.cjs doctor
@@ -164,6 +250,9 @@ node scripts/feishu_cli_tools.cjs base record-get --base-token "<base_token>" --
 node scripts/feishu_cli_tools.cjs task upload-attachment --resource-id "<task_guid_or_url>" --file ".\brief.pdf"
 node scripts/feishu_cli_tools.cjs im messages-search --query "PRD" --page-size 10
 node scripts/feishu_cli_tools.cjs drive add-comment --doc "<doc_or_wiki_url>" --content '[{"type":"text","text":"请 review"}]' --dry-run
+node scripts/feishu_cli_tools.cjs drive version-history --file-token "<file_token>"
+node scripts/feishu_cli_tools.cjs drive version-get --file-token "<file_token>" --version "<version>" --output ".\versions"
+node scripts/feishu_cli_tools.cjs drive version-revert --file-token "<file_token>" --version "<version>" --dry-run
 ```
 
 高风险动作有门禁：
@@ -171,6 +260,7 @@ node scripts/feishu_cli_tools.cjs drive add-comment --doc "<doc_or_wiki_url>" --
 - `sheet delete-sheet` 必须传 `--yes` 或先 `--dry-run`。
 - `base record-delete` 必须传 `--yes` 或先 `--dry-run`。
 - `config bind` 必须传 `--confirm-bind` 和明确的 `--identity`。
+- `drive version-revert` 必须传 `--yes` 或先 `--dry-run`。
 
 ## 功能支持状态
 
@@ -209,7 +299,7 @@ node scripts/feishu_cli_tools.cjs drive add-comment --doc "<doc_or_wiki_url>" --
 - `scripts/import_feishu_markdown.cjs`：将一个 Markdown 文件回导到飞书 Docx，并恢复图片/文件位置。
 - `scripts/import_feishu_sheet.cjs`：显式 range 的 Sheet 写回和回读校验。
 - `scripts/feishu_markdown_file.cjs`：Drive 原生 Markdown 文件 create/fetch/overwrite。
-- `scripts/feishu_cli_tools.cjs`：lark-cli 1.0.24-1.0.27 新增能力的受控入口。
+- `scripts/feishu_cli_tools.cjs`：lark-cli 1.0.24-1.0.39 新增能力的受控入口。
 - `scripts/feishu_text_diagram.cjs`：白板 Mermaid/PlantUML 写入，以及 doc add-ons 不支持状态验证。
 - `scripts/lib/lark_cli.cjs`：公共 lark-cli runner、版本检查、JSON 解析和路径处理。
 

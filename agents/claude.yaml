@@ -1,0 +1,4 @@
+interface:
+  display_name: "Feishu Markdown Sync v1.7.0"
+  short_description: "Claude Code skill for Feishu/Lark Doc/Wiki/Sheet/Drive sync, audit, and guarded write-back"
+  default_prompt: "Use the feishu-markdown-sync Claude Code skill to export Feishu wiki/doc/Sheet content to Markdown and CSV, inspect manifest sync status, write back guarded Markdown/CSV changes, sync Drive ordinary files, manage Drive-native Markdown diff/patch/version history, export Slides snapshots, and apply explicit Sheet style/image/filter updates."

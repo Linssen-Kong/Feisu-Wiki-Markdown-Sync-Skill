@@ -6,9 +6,9 @@
 
 Some legacy script names and default export folders still keep `wiki` for backward compatibility with existing doc/wiki sync workspaces. New product, install, roadmap, and release language should use **Feishu Markdown Sync** unless a command or environment variable requires the legacy name.
 
-Current release: `v1.6.0`
+Current release: `v1.7.0`
 
-This release adopts `lark-cli v1.0.27`, adds Drive-native Markdown file helpers, exposes the newest CLI shortcut families through guarded wrappers, and keeps the doc/wiki Markdown sync path separate from raw `.md` file management.
+This release adopts `lark-cli v1.0.39`, adds Claude Code and npm installation support, adds a Drive ordinary-file sync path, expands Sheet format/image/filter handling, exports Slides snapshots, and fixes export naming so Feishu titles are used whenever they are available.
 
 ## Configuration
 
@@ -48,6 +48,11 @@ Available configuration:
 - Re-import Markdown into Feishu docs with original-position image restore
 - Re-import standalone local non-Markdown files into Feishu docs as positioned file blocks
 - Manage Drive-native Markdown files through `lark-cli markdown +create/+fetch/+overwrite` without mixing them into doc/wiki sync
+- Sync ordinary Drive files directly through `drive +sync` for assets that do not need Markdown conversion
+- Inspect Drive file version history, download historical versions, and guard version reverts
+- Write explicit Sheet styles, images, and filter views in addition to CSV/JSON cell data
+- Export Slides nodes as PPTX snapshots for Git review and archival
+- Use Feishu titles consistently for exported object folders and files, with stable suffixes for duplicates
 - Use guarded project wrappers for new Sheet management, Base record, Task attachment, IM search, Drive comment, and config bind shortcuts
 - Write Mermaid/PlantUML text diagrams into live Feishu whiteboards, and keep doc v2 `<add-ons>` verification experimental
 - Keep export-level `tree.txt` and `codepen-links.md` inside the root document assets folder, with the export index appended to the root Markdown file
@@ -63,10 +68,27 @@ Feishu docs are great for collaboration, but they are not Git-friendly by defaul
 
 ## Version and CLI Requirement
 
-- Skill version: `v1.6.0`
-- Required `lark-cli`: `>= 1.0.27`
+- Skill version: `v1.7.0`
+- Required `lark-cli`: `>= 1.0.39`
 
-This version depends on `lark-cli docs +media-insert --selection-with-ellipsis` for positioned media restore, and uses `docs +fetch/+update --api-version v2`, `sheets +export/+write/+append/+read`, `whiteboard +query/+update`, `markdown +create/+fetch/+overwrite`, and the newer Sheet/Base/Task/IM/Drive/config shortcuts added through `lark-cli v1.0.24-v1.0.27`.
+This version depends on `lark-cli docs +media-insert --selection-with-ellipsis` for positioned media restore, and uses `docs +fetch/+update --api-version v2`, `sheets +export/+write/+append/+read`, `whiteboard +query/+update`, `markdown +create/+fetch/+overwrite`, and the newer Sheet/Base/Task/IM/Drive/config shortcuts added through `lark-cli v1.0.24-v1.0.39`.
+
+## Install With npm
+
+Install the package globally, then explicitly install the skill into Codex, Claude Code, or both:
+
+```powershell
+npm install -g feishu-markdown-sync
+feishu-markdown-sync install --target both --scope user
+```
+
+Or use `npx` from a packed or published package:
+
+```powershell
+npx feishu-markdown-sync install --target claude --scope project
+```
+
+The installer copies skill files only. It does not write credentials, run Feishu login, or overwrite an existing skill directory unless `--force` is provided.
 
 ## Install As A Local Codex Skill
 
@@ -79,6 +101,52 @@ python "$env:USERPROFILE\.codex\skills\.system\skill-installer\scripts\install-s
 If `C:\Users\<you>\.codex\skills\feishu-markdown-sync` already exists, remove or rename that installed skill directory first, then run the command again. If you previously installed `feishu-wiki-markdown-sync`, remove that old installed skill directory after confirming the new skill loads. Restart Codex after installation so the updated skill is loaded.
 
 > Migration note: this skill was previously installed as `feishu-wiki-markdown-sync`. The new install name is `feishu-markdown-sync`. Keeping both directories under `C:\Users\<you>\.codex\skills\` will make Codex load two skills with the same functional scope, so delete or rename the old `feishu-wiki-markdown-sync` directory after upgrading.
+
+## Install As A Claude Code Skill
+
+Project-local install:
+
+```powershell
+feishu-markdown-sync install --target claude --scope project
+```
+
+User-level install:
+
+```powershell
+feishu-markdown-sync install --target claude --scope user
+```
+
+Claude Code loads `.claude/skills/feishu-markdown-sync/SKILL.md`. The Claude skill references scripts via `${CLAUDE_SKILL_DIR}` so it works from user, project, or package-installed locations.
+
+## Sync Modes
+
+- **Structured content sync**: `scripts/feishu_sync.cjs` exports Wiki/Doc/Sheet content into Markdown, CSV, XML snapshots, metadata, and a manifest. Use this for reviewable PRDs, docs, and Sheet-backed planning artifacts.
+- **Drive ordinary-file sync**: `scripts/feishu_drive_sync.cjs` wraps `drive +sync` for ordinary Drive files such as images, PDFs, PPTX snapshots, attachments, and Drive-native Markdown. It is faster because no Markdown conversion is needed, but it skips online docx, sheet, bitable, slides, and similar cloud documents.
+- **Drive-native Markdown management**: `scripts/feishu_markdown_file.cjs` handles `.md` files stored as ordinary Drive files, including create/fetch/overwrite/diff/patch.
+
+## Export Naming
+
+v1.7.0 resolves export names in this order: fetched Feishu document/file title, Wiki node title, then a token-derived fallback. Same-folder duplicates receive a stable short suffix instead of overwriting each other. `metadata.json` records `wikiNodeTitle`, `resolvedTitle`, `filenameTitleSource`, and `safeFilename` so naming decisions are auditable.
+
+Sheet workbook filenames use the Feishu file title. Per-sheet CSV and preview files use worksheet titles. Media and embedded resources keep a short token/hash suffix for collision resistance, with readable prefixes when captions or labels are available.
+
+## v1.7.0 Validation Status
+
+Local validation completed on 2026-05-24:
+
+- `npm run check` passed for all scripts.
+- `feishu-markdown-sync doctor` and `feishu_cli_tools doctor` passed on `lark-cli version 1.0.39`.
+- Drive sync, Drive version revert, Sheet style, and Sheet filter-view dry-runs produced the expected API requests.
+- `npm pack`, tarball install, package bin execution, and project-level Claude skill installation passed.
+
+Cloud validation completed after additional authorization:
+
+- Drive ordinary-file sync passed for push, pull, and `keep-both` conflict handling.
+- Drive version history and historical-version download passed.
+- Sheet CSV write-back, style write-back, image write-back, filter view/condition creation, and format snapshot export passed.
+- Slides creation and PPTX export passed.
+
+Some Feishu OpenAPI calls hit transient TLS handshake timeouts; retrying succeeded. See `docs/validation-log.md` for redacted artifact details.
 
 ## Product Direction
 
@@ -96,14 +164,18 @@ See [docs/security-privacy-check.md](docs/security-privacy-check.md) for the Git
 
 ## Release Log
 
-### v1.6.0
+### v1.7.0
 
-- Raised the documented and script-enforced `lark-cli` baseline to `>= 1.0.27`.
-- Added `scripts/lib/lark_cli.cjs` for shared CLI execution, JSON parsing, version checks, and local path handling.
-- Added `scripts/feishu_markdown_file.cjs` for Drive-native Markdown files. This is separate from doc/wiki Markdown Sync and wraps `markdown +create/+fetch/+overwrite`.
-- Added `scripts/feishu_cli_tools.cjs` as a guarded project entry for new Sheet management, Base record get/delete, Task attachment upload, IM message search, Drive comments, and config bind flows.
-- Added `scripts/feishu_text_diagram.cjs` for Mermaid/PlantUML whiteboard updates and experimental doc v2 `<add-ons>` round-trip verification.
-- Documented `lark-cli v1.0.24-v1.0.27` upgrade intake: Sheet management, Base batch operations, task attachments, Drive comment preflight, Markdown create URL output, skills drift notices, IM `message_app_link`, auth scope hints, whiteboard risk classification, and `lark-channel` config binding.
+- Raised the documented and script-enforced `lark-cli` baseline to `>= 1.0.39`.
+- Added npm packaging and explicit Codex/Claude Code skill installation.
+- Added Claude Code skill metadata under `.claude/skills/feishu-markdown-sync/`.
+- Added `scripts/feishu_drive_sync.cjs` for ordinary Drive file sync through `drive +sync`.
+- Added Drive inspect/version wrappers, Markdown diff/patch support, and guarded version revert handling.
+- Added Sheet style, batch style, image, filter view, and filter condition write paths.
+- Added `scripts/export_feishu_sheet_format.cjs` for Sheet filter metadata snapshots.
+- Added Slides PPTX snapshot export for Wiki slides nodes.
+- Fixed export naming by resolving real Feishu titles, recording naming metadata, and avoiding same-folder title collisions.
+- Local validation: `npm run check` passes on all project scripts. Cloud validation requires tenant tokens and permissions and should be recorded in `docs/validation-log.md` after running in the target tenant.
 
 ### v1.5.0
 
@@ -312,7 +384,7 @@ node scripts/feishu_text_diagram.cjs whiteboard update --whiteboard-token "<whit
 
 The overwrite command dry-runs by default. After reviewing the request, add `--apply` to execute the whiteboard update.
 
-### 5b. Use lark-cli 1.0.27 sidecar tools
+### 5b. Use lark-cli 1.0.39 sidecar tools
 
 ```powershell
 node scripts/feishu_cli_tools.cjs doctor
@@ -426,7 +498,7 @@ During import, the skill will:
 
 ## Sync and Format Behavior
 
-v1.6.0 uses three local layers:
+v1.7.0 uses three local layers:
 
 - editable layer: Markdown, CSV, and readable preview files
 - format layer: `*.assets/*.format.xml`, `*.xlsx`, `sheet-format.json`, `format-map.json`, and raw JSON audit files
@@ -434,7 +506,7 @@ v1.6.0 uses three local layers:
 
 The sync shell treats format-layer edits as high risk. If a local change touches `*.format.xml`, `format-map.json`, `sheet-format.json`, or raw JSON, `push --apply` stops and writes a conflict report instead of guessing.
 
-For Markdown push, v1.6.0 is deliberately conservative: if `format-map.json` shows rich format blocks, guarded push will not do a Markdown overwrite. It compiles supported Markdown edits into the XML snapshot first. If the Markdown and XML structures cannot be matched safely, it stops and writes a conflict report.
+For Markdown push, v1.7.0 is deliberately conservative: if `format-map.json` shows rich format blocks, guarded push will not do a Markdown overwrite. It compiles supported Markdown edits into the XML snapshot first. If the Markdown and XML structures cannot be matched safely, it stops and writes a conflict report.
 
 Manual consistency check:
 
@@ -593,7 +665,7 @@ Conclusion:
 - `scripts/feishu_markdown_file.cjs`
   Create, fetch, and overwrite Drive-native Markdown files without replacing doc/wiki sync
 - `scripts/feishu_cli_tools.cjs`
-  Run guarded wrappers for lark-cli v1.0.24-v1.0.27 Sheet, Base, Task, IM, Drive, and config capabilities
+  Run guarded wrappers for lark-cli v1.0.24-v1.0.39 Sheet, Base, Task, IM, Drive, and config capabilities
 - `scripts/feishu_text_diagram.cjs`
   Update whiteboards from Mermaid/PlantUML and verify doc `<add-ons>` text drawing experimentally
 - `scripts/lib/lark_cli.cjs`

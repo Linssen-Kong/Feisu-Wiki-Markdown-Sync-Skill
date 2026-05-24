@@ -17,6 +17,8 @@ function printUsage() {
       "  node scripts/feishu_markdown_file.cjs create --file <local.md> [--folder-token <token>] [--name <name.md>] [--as user|bot] [--dry-run]",
       "  node scripts/feishu_markdown_file.cjs fetch --file-token <token> [--output <path>] [--overwrite] [--as user|bot]",
       "  node scripts/feishu_markdown_file.cjs overwrite --file-token <token> --file <local.md> [--name <name.md>] [--as user|bot] [--dry-run]",
+      "  node scripts/feishu_markdown_file.cjs diff --file-token <token> [--file <local.md>|--from-version <v> [--to-version <v>]] [--context-lines <n>]",
+      "  node scripts/feishu_markdown_file.cjs patch --file-token <token> --pattern <text|@file> --content <text|@file> [--regex] [--dry-run]",
       "",
       "说明:",
       "  - 本脚本只管理 Drive 原生 Markdown 文件，不用于 doc/wiki 文档同步。",
@@ -36,7 +38,20 @@ function parseArgs(argv) {
     dryRun: false,
     overwrite: false,
   };
-  const valueOptions = new Set(["--file", "--folder-token", "--name", "--file-token", "--output", "--as"]);
+  const valueOptions = new Set([
+    "--file",
+    "--folder-token",
+    "--wiki-token",
+    "--name",
+    "--file-token",
+    "--output",
+    "--as",
+    "--from-version",
+    "--to-version",
+    "--context-lines",
+    "--pattern",
+    "--content",
+  ]);
   for (let i = 1; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === "--help") {
@@ -51,6 +66,10 @@ function parseArgs(argv) {
       options.overwrite = true;
       continue;
     }
+    if (arg === "--regex") {
+      options.regex = true;
+      continue;
+    }
     const optionName = [...valueOptions].find((name) => arg === name || arg.startsWith(`${name}=`));
     if (!optionName) {
       throw new Error(`未知参数: ${arg}`);
@@ -60,7 +79,7 @@ function parseArgs(argv) {
     options[key] = value;
     i = nextIndex;
   }
-  if (!["create", "fetch", "overwrite"].includes(options.command)) {
+  if (!["create", "fetch", "overwrite", "diff", "patch"].includes(options.command)) {
     throw new Error(`未知命令: ${options.command}`);
   }
   if (!["user", "bot"].includes(options.as)) {
@@ -84,6 +103,7 @@ function buildCreateArgs(options) {
   const file = requireExistingMarkdown(options.file);
   const args = ["markdown", "+create", "--file", file, "--as", options.as];
   if (options.folderToken) args.push("--folder-token", options.folderToken);
+  if (options.wikiToken) args.push("--wiki-token", options.wikiToken);
   if (options.name) args.push("--name", options.name);
   if (options.dryRun) args.push("--dry-run");
   return args;
@@ -110,6 +130,46 @@ function buildOverwriteArgs(options) {
   return args;
 }
 
+function buildDiffArgs(options) {
+  if (!options.fileToken) {
+    throw new Error("diff 必须提供 --file-token");
+  }
+  const args = ["markdown", "+diff", "--file-token", options.fileToken, "--as", options.as];
+  if (options.file) {
+    ensureMarkdownFile(options.file);
+    args.push("--file", toCliRelativePath(options.file));
+  }
+  if (options.fromVersion) args.push("--from-version", options.fromVersion);
+  if (options.toVersion) args.push("--to-version", options.toVersion);
+  if (options.contextLines) args.push("--context-lines", options.contextLines);
+  if (options.dryRun) args.push("--dry-run");
+  return args;
+}
+
+function buildPatchArgs(options) {
+  if (!options.fileToken) {
+    throw new Error("patch 必须提供 --file-token");
+  }
+  if (!options.pattern || !options.content) {
+    throw new Error("patch 必须提供 --pattern 和 --content");
+  }
+  const args = [
+    "markdown",
+    "+patch",
+    "--file-token",
+    options.fileToken,
+    "--pattern",
+    options.pattern,
+    "--content",
+    options.content,
+    "--as",
+    options.as,
+  ];
+  if (options.regex) args.push("--regex");
+  if (options.dryRun) args.push("--dry-run");
+  return args;
+}
+
 function main() {
   const options = parseArgs(process.argv.slice(2));
   assertMinimumLarkCliVersion();
@@ -117,6 +177,8 @@ function main() {
     create: buildCreateArgs,
     fetch: buildFetchArgs,
     overwrite: buildOverwriteArgs,
+    diff: buildDiffArgs,
+    patch: buildPatchArgs,
   };
   const result = runLark(argsByCommand[options.command](options));
   printJson(result);

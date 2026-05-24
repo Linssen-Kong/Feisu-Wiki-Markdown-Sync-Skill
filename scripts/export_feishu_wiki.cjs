@@ -17,6 +17,7 @@ const BOOLEAN_FALSE_VALUES = new Set(["0", "false", "no", "off"]);
 const EXPORT_INDEX_BEGIN = "<!-- FEISHU_EXPORT_INDEX_BEGIN -->";
 const EXPORT_INDEX_END = "<!-- FEISHU_EXPORT_INDEX_END -->";
 const NODE_BIN = process.env.NODE_BINARY || process.execPath || "node";
+const EXPORT_NAME_CLAIMS = new Set();
 
 function printUsage() {
   console.error(
@@ -237,6 +238,47 @@ function sanitizeSegment(name) {
   return cleaned || "untitled";
 }
 
+function claimExportName(parentDir, title, token = "") {
+  const base = sanitizeSegment(title || token || "untitled");
+  const parentKey = path.resolve(parentDir).toLowerCase();
+  const suffix = tokenFileSuffix(token).slice(0, 6);
+  let candidate = base;
+  let index = 2;
+  while (
+    EXPORT_NAME_CLAIMS.has(`${parentKey}/${candidate.toLowerCase()}`) ||
+    fileExists(path.join(parentDir, candidate))
+  ) {
+    candidate = suffix && index === 2 ? `${base}-${suffix}` : `${base}-${index}`;
+    index += 1;
+  }
+  EXPORT_NAME_CLAIMS.add(`${parentKey}/${candidate.toLowerCase()}`);
+  return candidate;
+}
+
+function resolveExportTitle(node, fetched = {}) {
+  const fetchedTitle = String(fetched.title || fetched.data?.title || "").trim();
+  const wikiNodeTitle = String(node?.title || "").trim();
+  if (fetchedTitle) {
+    return {
+      title: fetchedTitle,
+      wikiNodeTitle,
+      filenameTitleSource: "fetched-title",
+    };
+  }
+  if (wikiNodeTitle) {
+    return {
+      title: wikiNodeTitle,
+      wikiNodeTitle,
+      filenameTitleSource: "wiki-node-title",
+    };
+  }
+  return {
+    title: tokenFileSuffix(node?.node_token || node?.obj_token || ""),
+    wikiNodeTitle,
+    filenameTitleSource: "token-fallback",
+  };
+}
+
 function tokenFileSuffix(token) {
   const text = String(token || "").trim();
   if (!text) {
@@ -301,9 +343,13 @@ function formatWhiteboardFallback(token) {
   return "\n\n[白板内容未导出]\n\n";
 }
 
-function buildMetadata(node) {
+function buildMetadata(node, naming = {}) {
   const metadata = {
-    title: node.title,
+    title: naming.resolvedTitle || node.title,
+    wikiNodeTitle: naming.wikiNodeTitle ?? node.title,
+    resolvedTitle: naming.resolvedTitle || node.title,
+    filenameTitleSource: naming.filenameTitleSource || "wiki-node-title",
+    safeFilename: naming.safeFilename || sanitizeSegment(naming.resolvedTitle || node.title),
     node_type: node.node_type,
     obj_type: node.obj_type,
     has_child: !!node.has_child,
@@ -692,6 +738,29 @@ function exportSheetXlsx(spreadsheetToken, outputPath) {
       "xlsx",
       "--output-path",
       cliOutputPath,
+    ],
+    { allowFailure: true },
+  );
+}
+
+function exportSlidesPptx(token, outputDir, fileName) {
+  return runLark(
+    [
+      "drive",
+      "+export",
+      "--doc-type",
+      "slides",
+      "--token",
+      token,
+      "--file-extension",
+      "pptx",
+      "--output-dir",
+      toCliRelativePath(outputDir),
+      "--file-name",
+      fileName,
+      "--overwrite",
+      "--as",
+      "user",
     ],
     { allowFailure: true },
   );
@@ -1389,20 +1458,32 @@ function walkTree(nodeInfo) {
 }
 
 function exportNode(node, parentDir, collected) {
-  const safeTitle = sanitizeSegment(node.title);
+  const fetchedDoc = node.obj_type === "docx" || node.obj_type === "doc" ? fetchDocMarkdown(node.node_token) : null;
+  const naming = resolveExportTitle(node, fetchedDoc || {});
+  const resolvedTitle = naming.title;
+  const safeTitle = node.__exportName || claimExportName(parentDir, resolvedTitle, node.node_token || node.obj_token);
+  node.__exportName = safeTitle;
+  node.__resolvedTitle = resolvedTitle;
+  node.__filenameTitleSource = naming.filenameTitleSource;
   const folderName = safeTitle;
   const nodeDir = path.join(parentDir, folderName);
   ensureDir(nodeDir);
 
   const assetsDir = path.join(nodeDir, `${safeTitle}.assets`);
   ensureDir(assetsDir);
-  const metadata = buildMetadata(node);
+  const metadata = buildMetadata(node, {
+    wikiNodeTitle: naming.wikiNodeTitle,
+    resolvedTitle,
+    filenameTitleSource: naming.filenameTitleSource,
+    safeFilename: safeTitle,
+  });
   writeFile(path.join(assetsDir, "metadata.json"), `${JSON.stringify(metadata, null, 2)}\n`);
 
   let indexLines = [];
-  indexLines.push(`# ${node.title}`);
+  indexLines.push(`# ${resolvedTitle}`);
   indexLines.push("");
   indexLines.push(`- 节点类型: ${node.obj_type}`);
+  indexLines.push(`- 文件名标题来源: ${naming.filenameTitleSource}`);
   if (CONFIG.includeSensitiveMetadata) {
     indexLines.push(`- 原始链接: ${buildWikiUrl(node.node_token)}`);
     indexLines.push(`- 飞书节点 Token: \`${node.node_token}\``);
@@ -1410,11 +1491,13 @@ function exportNode(node, parentDir, collected) {
   indexLines.push("");
 
   if (node.obj_type === "docx" || node.obj_type === "doc") {
-    const fetched = fetchDocMarkdown(node.node_token);
+    const fetched = fetchedDoc;
     const fetchedXml = fetchDocXml(node.node_token, node.obj_token);
     const formatMap = {
       version: 1,
-      title: node.title,
+      title: resolvedTitle,
+      wikiNodeTitle: naming.wikiNodeTitle,
+      filenameTitleSource: naming.filenameTitleSource,
       objType: node.obj_type,
       nodeTokenRedacted: !CONFIG.includeSensitiveMetadata,
       revisionId: fetchedXml.revisionId,
@@ -1450,7 +1533,7 @@ function exportNode(node, parentDir, collected) {
       for (const link of transformed.codepenLinks) {
         indexLines.push(`- ${link}`);
         collected.codepen.push({
-          title: node.title,
+          title: resolvedTitle,
           url: link,
           node_token: node.node_token,
         });
@@ -1458,7 +1541,7 @@ function exportNode(node, parentDir, collected) {
       indexLines.push("");
     }
   } else if (node.obj_type === "sheet") {
-    const xlsxPath = path.join(nodeDir, `${sanitizeSegment(node.title)}.xlsx`);
+    const xlsxPath = path.join(nodeDir, `${safeTitle}.xlsx`);
     const workbookExport = exportSheetXlsx(node.obj_token, xlsxPath);
     if (workbookExport && workbookExport.ok === false) {
       indexLines.push(`- 当前状态: 未能读取表格内容`);
@@ -1471,12 +1554,20 @@ function exportNode(node, parentDir, collected) {
       const csvFiles = convertXlsxToCsvs(xlsxPath, csvOutputDir);
       const remoteSheets = listSheetMetadata(node.obj_token);
       const sheetFormat = {
-        version: 1,
-        title: node.title,
+        version: 2,
+        title: resolvedTitle,
+        fileTitle: resolvedTitle,
+        wikiNodeTitle: naming.wikiNodeTitle,
+        filenameTitleSource: naming.filenameTitleSource,
+        safeFilename: safeTitle,
         objType: "sheet",
         spreadsheetTokenRedacted: !CONFIG.includeSensitiveMetadata,
         spreadsheetToken: CONFIG.includeSensitiveMetadata ? node.obj_token : null,
         workbook: path.basename(xlsxPath),
+        styles: [],
+        filterViews: [],
+        filterConditions: [],
+        images: [],
         sheets: [],
       };
       indexLines.push("## 表格导出");
@@ -1527,6 +1618,8 @@ function exportNode(node, parentDir, collected) {
           preview: previewName,
           sheetId: remoteSheet?.sheet_id || null,
           title: csvBaseName,
+          sheetTitle: remoteSheet?.title || csvBaseName,
+          filenameTitleSource: "sheet-title",
           rowCount: parsedCsv.length,
           columnCount: Math.max(0, ...parsedCsv.map((row) => row.length)),
           defaultRange: `A1:${columnName(Math.max(1, ...parsedCsv.map((row) => row.length)))}${Math.max(1, parsedCsv.length)}`,
@@ -1535,6 +1628,21 @@ function exportNode(node, parentDir, collected) {
       writeFile(path.join(nodeDir, "sheet-format.json"), `${JSON.stringify(sheetFormat, null, 2)}\n`);
       const readmePath = path.join(nodeDir, "README.md");
       writeFile(readmePath, `${indexLines.join("\n").trimEnd()}\n`);
+    }
+  } else if (node.obj_type === "slides") {
+    const pptxName = `${safeTitle}.pptx`;
+    const slideExport = exportSlidesPptx(node.obj_token, nodeDir, pptxName);
+    if (slideExport && slideExport.ok === false) {
+      indexLines.push(`- 当前状态: 未能导出 Slides`);
+      indexLines.push(`- 原因: ${slideExport.error?.message || "未知错误"}`);
+      indexLines.push("");
+    } else {
+      indexLines.push("## Slides 导出");
+      indexLines.push("");
+      indexLines.push(`- 已导出文件: [${pptxName}](./${pptxName})`);
+      indexLines.push("- 回写策略: v1.7.0 仅保留 PPTX 快照，不做结构化 Slides 回写。");
+      indexLines.push("");
+      writeFile(path.join(nodeDir, "README.md"), `${indexLines.join("\n").trimEnd()}\n`);
     }
   } else {
     indexLines.push("> 当前脚本未对该对象类型做正文导出，保留了来源链接和元数据。");
@@ -1546,9 +1654,13 @@ function exportNode(node, parentDir, collected) {
     indexLines.push("");
     for (const child of node.children) {
       const childNode = unwrapNode(child);
-      const childSafeTitle = sanitizeSegment(childNode.title);
+      if (!childNode.__exportName) {
+        exportNode(childNode, nodeDir, collected);
+      }
+      const childTitle = childNode.__resolvedTitle || childNode.title;
+      const childSafeTitle = childNode.__exportName || sanitizeSegment(childTitle);
       const childFolder = childSafeTitle;
-      indexLines.push(`- [${childNode.title}](./${childFolder}/${childSafeTitle}.md)`);
+      indexLines.push(`- [${childTitle}](./${childFolder}/${childSafeTitle}.md)`);
     }
     indexLines.push("");
   }
@@ -1561,10 +1673,13 @@ function exportNode(node, parentDir, collected) {
   if (node.children) {
     for (const child of node.children) {
       const childNode = unwrapNode(child);
-      exportNode(childNode, nodeDir, collected);
+      if (!childNode.__exported) {
+        exportNode(childNode, nodeDir, collected);
+      }
     }
   }
 
+  node.__exported = true;
   return nodeDir;
 }
 

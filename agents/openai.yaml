@@ -1,4 +1,4 @@
 interface:
-  display_name: "Feishu Markdown Sync v1.6.0"
-  short_description: "Sync, audit, and write back Feishu wiki, doc, and Sheet content with readable local files and format snapshots"
-  default_prompt: "Use $feishu-markdown-sync v1.6.0 to pull Feishu wiki/doc/Sheet content into readable Markdown and CSV assets, inspect sync status, preserve format snapshots, audit round-trip fidelity, write CSV/JSON data back into an explicit Sheet range, manage Drive-native Markdown files separately, update whiteboards from Mermaid/PlantUML, or re-import one Markdown file back into a Feishu doc with positioned image and file restore."
+  display_name: "Feishu Markdown Sync v1.7.0"
+  short_description: "Sync, audit, and write back Feishu wiki, doc, Sheet, Drive file, and Slides content with readable local files and format snapshots"
+  default_prompt: "Use $feishu-markdown-sync v1.7.0 to pull Feishu wiki/doc/Sheet content into readable Markdown and CSV assets, inspect sync status, preserve format snapshots, audit round-trip fidelity, write CSV/JSON data and explicit style/image/filter changes back into Sheet ranges, sync Drive ordinary files, manage Drive-native Markdown diff/patch/version history, export Slides snapshots, update whiteboards from Mermaid/PlantUML, or re-import one Markdown file back into a Feishu doc with positioned image and file restore."

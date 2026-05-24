@@ -1,0 +1,9 @@
+exports/
+.tmp/
+.env
+*.log
+*.tgz
+node_modules/
+.git/
+.codex/
+**/.feishu-sync/

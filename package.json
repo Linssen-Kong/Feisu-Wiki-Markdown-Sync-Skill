@@ -1,0 +1,33 @@
+{
+  "name": "feishu-markdown-sync",
+  "version": "1.7.0",
+  "description": "Git-friendly Feishu/Lark Markdown, Sheet, Drive file, and Slides sync skill for AI agents",
+  "license": "MIT",
+  "type": "commonjs",
+  "bin": {
+    "feishu-markdown-sync": "scripts/feishu_markdown_sync.cjs",
+    "feishu-drive-sync": "scripts/feishu_drive_sync.cjs",
+    "feishu-markdown-file": "scripts/feishu_markdown_file.cjs",
+    "feishu-cli-tools": "scripts/feishu_cli_tools.cjs",
+    "feishu-import-markdown": "scripts/import_feishu_markdown.cjs",
+    "feishu-import-sheet": "scripts/import_feishu_sheet.cjs"
+  },
+  "files": [
+    "SKILL.md",
+    "README.md",
+    "README.zh.md",
+    "agents",
+    "docs",
+    "scripts",
+    ".claude/skills/feishu-markdown-sync/SKILL.md"
+  ],
+  "scripts": {
+    "check": "node --check scripts/feishu_markdown_sync.cjs && node --check scripts/feishu_drive_sync.cjs && node --check scripts/feishu_cli_tools.cjs && node --check scripts/feishu_markdown_file.cjs && node --check scripts/export_feishu_wiki.cjs && node --check scripts/import_feishu_markdown.cjs && node --check scripts/import_feishu_sheet.cjs && node --check scripts/export_feishu_sheet_format.cjs && node --check scripts/feishu_sync.cjs && node --check scripts/feishu_text_diagram.cjs && node --check scripts/compile_feishu_doc_xml.cjs && node --check scripts/audit_feishu_export.cjs"
+  },
+  "engines": {
+    "node": ">=16"
+  },
+  "dependencies": {
+    "feishu-markdown-sync": "file:feishu-markdown-sync-1.7.0.tgz"
+  }
+}

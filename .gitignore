@@ -1,6 +1,8 @@
 exports/
 .tmp/
 node_modules/
+*.tgz
+.codex/
 .env
 .env.*
 !.env.example

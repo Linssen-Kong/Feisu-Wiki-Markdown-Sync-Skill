@@ -22,6 +22,13 @@ const COMMANDS = {
   "task upload-attachment": { service: "task", shortcut: "+upload-attachment", risk: "write" },
   "im messages-search": { service: "im", shortcut: "+messages-search", risk: "read" },
   "drive add-comment": { service: "drive", shortcut: "+add-comment", risk: "write" },
+  "drive inspect": { service: "drive", shortcut: "+inspect", risk: "read" },
+  "drive version-history": { service: "drive", shortcut: "+version-history", risk: "read" },
+  "drive version-get": { service: "drive", shortcut: "+version-get", risk: "read" },
+  "drive version-revert": { service: "drive", shortcut: "+version-revert", risk: "high-risk-write", requiresYes: true },
+  "wiki space-list": { service: "wiki", shortcut: "+space-list", risk: "read" },
+  "wiki node-list": { service: "wiki", shortcut: "+node-list", risk: "read" },
+  "wiki node-get": { service: "wiki", shortcut: "+node-get", risk: "read" },
   "config bind": { service: "config", shortcut: "bind", risk: "credential-bind", requiresConfirmBind: true },
 };
 
@@ -70,6 +77,16 @@ const OPTION_MAP = {
   "--app-id": "appId",
   "--identity": "identity",
   "--lang": "lang",
+  "--file-token": "fileToken",
+  "--version": "version",
+  "--output": "output",
+  "--overwrite": "overwrite",
+  "--cursor": "cursor",
+  "--limit": "limit",
+  "--space-id": "spaceId",
+  "--parent-node-token": "parentNodeToken",
+  "--node-token": "nodeToken",
+  "--obj-token": "objToken",
 };
 
 const REPEATABLE_OPTIONS = new Set(["--record-id", "--field-id"]);
@@ -81,6 +98,7 @@ const BOOLEAN_OPTIONS = new Set([
   "--page-all",
   "--confirm-bind",
   "--force",
+  "--overwrite",
 ]);
 
 function printUsage() {
@@ -92,11 +110,12 @@ function printUsage() {
       "  node scripts/feishu_cli_tools.cjs base record-get|record-delete [options]",
       "  node scripts/feishu_cli_tools.cjs task upload-attachment [options]",
       "  node scripts/feishu_cli_tools.cjs im messages-search [options]",
-      "  node scripts/feishu_cli_tools.cjs drive add-comment [options]",
+      "  node scripts/feishu_cli_tools.cjs drive add-comment|inspect|version-history|version-get|version-revert [options]",
+      "  node scripts/feishu_cli_tools.cjs wiki space-list|node-list|node-get [options]",
       "  node scripts/feishu_cli_tools.cjs config bind --source lark-channel|openclaw|hermes --identity bot-only|user-default --confirm-bind",
       "",
       "说明:",
-      "  - 本脚本是 lark-cli 1.0.24-1.0.27 新增能力的项目入口，不替代原 Markdown Sync 工作流。",
+      "  - 本脚本是 lark-cli 1.0.24-1.0.39 新增能力的项目入口，不替代原 Markdown Sync 工作流。",
       "  - delete-sheet、record-delete 必须显式传 --yes。",
       "  - config bind 必须显式传 --confirm-bind 和 --identity。",
     ].join("\n"),
@@ -245,6 +264,39 @@ function buildDriveArgs(values) {
   return args;
 }
 
+function buildDriveGenericArgs(command, values) {
+  requireYes(command, values);
+  const args = ["drive", COMMANDS[command].shortcut];
+  pushArg(args, "--url", values.url);
+  pushArg(args, "--type", values.type);
+  pushArg(args, "--file-token", values.fileToken);
+  pushArg(args, "--version", values.version);
+  pushArg(args, "--output", values.output ? toCliRelativePath(values.output) : "");
+  pushArg(args, "--cursor", values.cursor);
+  pushArg(args, "--limit", values.limit);
+  pushArg(args, "--format", values.format);
+  if (values.overwrite) args.push("--overwrite");
+  if (values.dryRun) args.push("--dry-run");
+  args.push("--as", values.as || "user");
+  return args;
+}
+
+function buildWikiArgs(command, values) {
+  const args = ["wiki", COMMANDS[command].shortcut];
+  pushArg(args, "--space-id", values.spaceId);
+  pushArg(args, "--parent-node-token", values.parentNodeToken);
+  pushArg(args, "--node-token", values.nodeToken);
+  pushArg(args, "--obj-token", values.objToken);
+  pushArg(args, "--url", values.url);
+  pushArg(args, "--page-size", values.pageSize);
+  pushArg(args, "--page-token", values.pageToken);
+  pushArg(args, "--format", values.format);
+  if (values.pageAll) args.push("--page-all");
+  if (values.dryRun) args.push("--dry-run");
+  args.push("--as", values.as || "user");
+  return args;
+}
+
 function buildConfigBindArgs(values) {
   if (!values.confirmBind) {
     throw new Error("config bind 会绑定/覆盖 Agent 凭据策略；确认后请追加 --confirm-bind。");
@@ -277,6 +329,7 @@ function doctor() {
       "1.0.25 skills version drift notice and unified update flow",
       "1.0.26 im message_app_link, auth scope hints, base error cleanup, whiteboard update risk classification",
       "1.0.27 lark-channel config bind source and installation fixes",
+      "1.0.28-1.0.39 drive sync/version/inspect, markdown diff/patch, sheet style/image/filter, slides export, Claude/npm packaging intake",
     ],
   });
 }
@@ -294,6 +347,8 @@ function main() {
   else if (parsed.key === "task upload-attachment") args = buildTaskArgs(parsed.values);
   else if (parsed.key === "im messages-search") args = buildImArgs(parsed.values);
   else if (parsed.key === "drive add-comment") args = buildDriveArgs(parsed.values);
+  else if (parsed.key.startsWith("drive ")) args = buildDriveGenericArgs(parsed.key, parsed.values);
+  else if (parsed.key.startsWith("wiki ")) args = buildWikiArgs(parsed.key, parsed.values);
   else if (parsed.key === "config bind") args = buildConfigBindArgs(parsed.values);
   else throw new Error(`未实现命令: ${parsed.key}`);
 

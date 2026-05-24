@@ -14,9 +14,9 @@ Keep legacy command names such as `scripts/export_feishu_wiki.cjs` until a compa
 - Engineering and AI agents that need stable Markdown, CSV, and asset files instead of opaque Feishu links.
 - Teams that want to review Feishu changes through diff, audit, and repeatable import/export flows.
 
-## v1.6.0 Goals
+## v1.7.0 Goals
 
-- Adopt `lark-cli >= 1.0.27` and document the `1.0.24-1.0.27` upgrade intake.
+- Adopt `lark-cli >= 1.0.39` and document the `1.0.24-1.0.39` upgrade intake.
 - Keep doc/wiki Markdown Sync as the core workflow while adding a separate Drive-native Markdown file path.
 - Add guarded wrappers for Sheet management, Base records, Task attachments, IM search, Drive comments, and config binding.
 - Make Mermaid/PlantUML whiteboard updates the supported text-drawing path, while keeping doc `<add-ons>` round-trip as explicit validation only.
@@ -64,9 +64,9 @@ Relevant capabilities to track from the recent CLI line:
 - Drive sync shortcuts such as pull, push, and status if they can replace custom export plumbing.
 - Markdown shortcuts and `@file` parameter support where they reduce temporary-file handling.
 
-As of 2026-05-10, the project baseline is `lark-cli >= 1.0.27`.
+As of 2026-05-10, the project baseline is `lark-cli >= 1.0.39`.
 
-Adopted in v1.6.0:
+Adopted in v1.7.0:
 
 - Drive-native Markdown file create/fetch/overwrite through `scripts/feishu_markdown_file.cjs`.
 - Sheet management, Base record, Task attachment, IM search, Drive comment, and config bind wrappers through `scripts/feishu_cli_tools.cjs`.
